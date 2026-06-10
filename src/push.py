@@ -16,8 +16,20 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIEF_PATH = ROOT / "out" / "brief.json"
+REPORT_PATH = ROOT / "out" / "fetch_report.json"
 
 SECTION_TITLES = {"actionable": "🎯 与你直接相关", "horizon": "🔭 视野扫描"}
+TELEGRAM_MAX_LEN = 4096
+
+
+def health_footer() -> str:
+    """Surface dead feeds where they'll actually be seen — in the briefing itself."""
+    if not REPORT_PATH.exists():
+        return ""
+    failed = json.loads(REPORT_PATH.read_text(encoding="utf-8")).get("failed_sources", [])
+    if not failed:
+        return ""
+    return f"⚠️ 源异常: {', '.join(failed)}"
 
 
 def push_telegram(brief: dict, date_str: str) -> bool:
@@ -41,12 +53,27 @@ def push_telegram(brief: dict, date_str: str) -> bool:
             if why:
                 lines.append(f"  └ {why}")
         lines.append("")
+    footer = health_footer()
+    if footer:
+        lines.append(html.escape(footer))
+
+    text = "\n".join(lines).strip()
+    if len(text) > TELEGRAM_MAX_LEN:
+        # drop trailing whole lines rather than risk cutting an HTML tag in half
+        kept = []
+        total = 0
+        for line in text.split("\n"):
+            if total + len(line) + 1 > TELEGRAM_MAX_LEN - 2:
+                break
+            kept.append(line)
+            total += len(line) + 1
+        text = "\n".join(kept) + "\n…"
 
     resp = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
         json={
             "chat_id": chat_id,
-            "text": "\n".join(lines).strip(),
+            "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         },
@@ -80,6 +107,9 @@ def push_feishu(brief: dict, date_str: str) -> bool:
             if item.get("why_zh"):
                 content.append([{"tag": "text", "text": f"  └ {item['why_zh']}"}])
         content.append([{"tag": "text", "text": ""}])
+    footer = health_footer()
+    if footer:
+        content.append([{"tag": "text", "text": footer}])
 
     resp = requests.post(
         webhook,

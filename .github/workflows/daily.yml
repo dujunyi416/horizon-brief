@@ -55,3 +55,23 @@ jobs:
           git add data state
           git diff --cached --quiet || git commit -m "data: $(date -u +%F) run"
           git push
+
+      # 反静默死亡: 任何一步挂了都要在每天必看的渠道里留下尸检入口
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MSG="⚠️ Horizon Brief 今日运行失败，点开看日志: ${RUN_URL}"
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode chat_id="${TELEGRAM_CHAT_ID}" \
+              --data-urlencode text="${MSG}" || true
+          fi
+          if [ -n "$FEISHU_WEBHOOK_URL" ]; then
+            curl -sf -X POST "$FEISHU_WEBHOOK_URL" -H 'Content-Type: application/json' \
+              -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"${MSG}\"}}" || true
+          fi

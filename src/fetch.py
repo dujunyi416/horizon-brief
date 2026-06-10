@@ -13,6 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SEEN_PATH = ROOT / "state" / "seen.json"
 OUT_PATH = ROOT / "out" / "candidates.json"
+REPORT_PATH = ROOT / "out" / "fetch_report.json"
 SEEN_TTL_DAYS = 14
 
 
@@ -50,6 +51,15 @@ def clean_summary(entry) -> str:
     return text[:300]
 
 
+def clean_title(title: str, feed_url: str) -> str:
+    import re
+
+    # Google News appends " - Publisher" to every headline
+    if "news.google.com" in feed_url:
+        return re.sub(r"\s+-\s+[^-]+$", "", title).strip() or title
+    return title
+
+
 def main() -> int:
     config = yaml.safe_load((ROOT / "config" / "sources.yaml").read_text(encoding="utf-8"))
     window = timedelta(hours=config.get("window_hours", 36))
@@ -58,14 +68,17 @@ def main() -> int:
     seen = load_seen()
 
     candidates = []
+    failed_sources = []
     for src in config["sources"]:
         try:
             feed = feedparser.parse(src["url"], agent="horizon-brief/1.0 (+https://github.com)")
         except Exception as exc:  # noqa: BLE001 - a dead feed must not kill the run
             print(f"[warn] {src['name']}: {exc}", file=sys.stderr)
+            failed_sources.append(src["name"])
             continue
         if feed.bozo and not feed.entries:
             print(f"[warn] {src['name']}: unreadable feed ({feed.get('bozo_exception')})", file=sys.stderr)
+            failed_sources.append(src["name"])
             continue
 
         taken = 0
@@ -73,7 +86,7 @@ def main() -> int:
             if taken >= src.get("cap", 10):
                 break
             url = getattr(entry, "link", "") or ""
-            title = (getattr(entry, "title", "") or "").strip()
+            title = clean_title((getattr(entry, "title", "") or "").strip(), src["url"])
             if not url or not title:
                 continue
             published = parse_published(entry)
@@ -107,6 +120,10 @@ def main() -> int:
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(candidates, ensure_ascii=False, indent=1), encoding="utf-8")
+    REPORT_PATH.write_text(
+        json.dumps({"failed_sources": failed_sources, "n_candidates": len(candidates)}),
+        encoding="utf-8",
+    )
     save_seen(seen)
     print(f"[done] {len(candidates)} candidates -> {OUT_PATH.relative_to(ROOT)}")
     return 0
