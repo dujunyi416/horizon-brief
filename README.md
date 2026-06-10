@@ -49,8 +49,10 @@ GitHub Actions (每天 21:30 UTC = 布里斯班 07:30)
 排序质量 = agenda 新鲜度。研究议程变了就在本地改 `agenda.md`（已 gitignore），然后一条命令同步：
 
 ```powershell
-gh secret set AGENDA < agenda.md
+gh secret set AGENDA -b (Get-Content agenda.md -Raw)
 ```
+
+> ⚠️ Windows 用户设置所有 secret 都请用 `-b` 参数传值。PowerShell 管道（`"..." | gh secret set`）会给值偷偷加上 U+FEFF（BOM），导致运行时 `InvalidSchema: No connection adapters` 这类诡异错误；`<` 重定向则在 PowerShell 里直接不可用。代码层已对凭证做了 BOM 清洗兜底，但源头干净更好。
 
 把这步做进你"策略书变更"的工作流里——议程变更本来就要写文档，顺手同步一份。未来如果想自动注入实时仓位，可以让交易仓库的本地定时任务定期跑同一条命令。
 
