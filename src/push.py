@@ -22,6 +22,15 @@ SECTION_TITLES = {"actionable": "🎯 与你直接相关", "horizon": "🔭 视�
 TELEGRAM_MAX_LEN = 4096
 
 
+def env(name: str) -> str:
+    """Read an env var stripped of whitespace and BOM.
+
+    Windows 上用 PowerShell 管道喂 `gh secret set` 会给值带上 U+FEFF，
+    实测会让 requests 报 InvalidSchema —— 所有凭证都过这层清洗。
+    """
+    return os.environ.get(name, "").strip().lstrip("\ufeff").strip()
+
+
 def health_footer() -> str:
     """Surface dead feeds where they'll actually be seen — in the briefing itself."""
     if not REPORT_PATH.exists():
@@ -33,8 +42,8 @@ def health_footer() -> str:
 
 
 def push_telegram(brief: dict, date_str: str) -> bool:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    token = env("TELEGRAM_BOT_TOKEN")
+    chat_id = env("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         return False
 
@@ -87,7 +96,7 @@ def push_telegram(brief: dict, date_str: str) -> bool:
 
 
 def push_feishu(brief: dict, date_str: str) -> bool:
-    webhook = os.environ.get("FEISHU_WEBHOOK_URL")
+    webhook = env("FEISHU_WEBHOOK_URL")
     if not webhook:
         return False
     content = []
@@ -110,7 +119,7 @@ def push_feishu(brief: dict, date_str: str) -> bool:
     if footer:
         content.append([{"tag": "text", "text": footer}])
     # 「自定义关键词」安全策略只检查正文，不检查标题 (实测 19024 Key Words Not Found)
-    keyword = os.environ.get("FEISHU_KEYWORD", "").strip()
+    keyword = env("FEISHU_KEYWORD")
     if keyword:
         content.append([{"tag": "text", "text": f"#{keyword}"}])
 
@@ -147,7 +156,14 @@ def main() -> int:
     aest = timezone(timedelta(hours=10))
     date_str = datetime.now(aest).strftime("%Y-%m-%d %a")
 
-    sent = [push_telegram(brief, date_str), push_feishu(brief, date_str)]
+    # 单通道异常不能拖死另一个通道
+    sent = []
+    for channel in (push_telegram, push_feishu):
+        try:
+            sent.append(channel(brief, date_str))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[error] {channel.__name__}: {exc}", file=sys.stderr)
+            sent.append(False)
     if not any(sent):
         print("[warn] no channel configured or all pushes failed", file=sys.stderr)
         return 1

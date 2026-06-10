@@ -68,9 +68,22 @@ def call_claude(prompt: str) -> str:
         cmd, input=prompt, capture_output=True, text=True, encoding="utf-8", timeout=600
     )
     if result.returncode != 0:
-        print(f"[error] claude exited {result.returncode}: {result.stderr[:2000]}", file=sys.stderr)
-        raise SystemExit(2)
+        raise RuntimeError(f"claude exited {result.returncode}: {result.stderr[:2000]}")
     return result.stdout
+
+
+def rank(prompt: str, attempts: int = 2) -> dict:
+    """Call Claude and parse JSON, retrying once — transient API errors and
+    malformed JSON are the two most likely daily failure modes."""
+    last_exc: Exception = RuntimeError("unreachable")
+    for i in range(attempts):
+        try:
+            return extract_json(call_claude(prompt))
+        except (RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            last_exc = exc
+            print(f"[warn] rank attempt {i + 1}/{attempts} failed: {exc}", file=sys.stderr)
+    print(f"[error] all rank attempts failed: {last_exc}", file=sys.stderr)
+    raise SystemExit(2)
 
 
 def extract_json(text: str) -> dict:
@@ -102,7 +115,7 @@ def main() -> int:
         today=today, agenda=agenda, candidates=json.dumps(slim, ensure_ascii=False)
     )
 
-    brief = extract_json(call_claude(prompt))
+    brief = rank(prompt)
 
     by_id = {c["id"]: c for c in candidates}
     for section in ("actionable", "horizon"):
