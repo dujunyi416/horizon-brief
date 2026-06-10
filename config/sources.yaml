@@ -1,0 +1,71 @@
+# RSS sources. topic is a coarse label written into the public dataset.
+# cap = max items taken per source per run (newest first).
+# Edit freely — fetch.py tolerates dead feeds and just logs a warning.
+
+window_hours: 36          # only items published within this window are considered
+max_candidates: 120       # hard cap on what goes into the LLM prompt
+
+sources:
+  # ---- 金融 / 宏观 (6) ----
+  - name: Fed Press Releases
+    url: https://www.federalreserve.gov/feeds/press_all.xml
+    topic: macro
+    cap: 8
+  - name: WSJ Markets
+    url: https://feeds.content.dowjones.io/public/rss/RSSMarketsMain
+    topic: markets
+    cap: 12
+  - name: CNBC Markets
+    url: https://www.cnbc.com/id/20910258/device/rss/rss.html
+    topic: markets
+    cap: 12
+  - name: FT Home
+    url: https://www.ft.com/rss/home
+    topic: finance
+    cap: 12
+  - name: Google News Business
+    url: https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en
+    topic: finance
+    cap: 12
+  - name: Calculated Risk
+    url: https://www.calculatedriskblog.com/feeds/posts/default
+    topic: macro
+    cap: 6
+
+  # ---- 前沿科技 (4) ----
+  - name: Hacker News Frontpage
+    url: https://hnrss.org/frontpage
+    topic: tech
+    cap: 15
+  - name: MIT Technology Review
+    url: https://www.technologyreview.com/feed/
+    topic: tech
+    cap: 8
+  - name: Ars Technica
+    url: https://feeds.arstechnica.com/arstechnica/index
+    topic: tech
+    cap: 10
+  - name: arXiv cs.AI
+    url: https://rss.arxiv.org/rss/cs.AI
+    topic: research
+    cap: 8
+
+  # ---- Crypto 头部 (2) ----
+  - name: The Block
+    url: https://www.theblock.co/rss.xml
+    topic: crypto
+    cap: 8
+  - name: CoinDesk
+    url: https://www.coindesk.com/arc/outboundfeeds/rss/
+    topic: crypto
+    cap: 8
+
+  # ---- 国内 (2) ----
+  - name: 36氪
+    url: https://36kr.com/feed
+    topic: china
+    cap: 10
+  - name: Google News 中文财经
+    url: https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=zh-CN&gl=CN&ceid=CN:zh-Hans
+    topic: china
+    cap: 10

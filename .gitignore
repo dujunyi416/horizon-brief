@@ -1,0 +1,7 @@
+# personalized runtime output — never commit (contains agenda-flavored reasoning)
+out/
+
+__pycache__/
+*.pyc
+.env
+agenda.md
