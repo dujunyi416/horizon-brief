@@ -38,6 +38,7 @@ GitHub Actions (每天 21:30 UTC = 布里斯班 07:30)
    | `TELEGRAM_BOT_TOKEN` | 二选一 | 找 [@BotFather](https://t.me/BotFather) 建 bot |
    | `TELEGRAM_CHAT_ID` | 二选一 | 给 bot 发条消息后访问 `api.telegram.org/bot<token>/getUpdates` 取 chat id |
    | `FEISHU_WEBHOOK_URL` | 二选一 | 飞书群 → 设置 → 群机器人 → 添加自定义机器人，复制 webhook |
+   | `FEISHU_KEYWORD` | 可选 | 若机器人开了「自定义关键词」安全策略，填那个关键词（以 #话题 形式附在正文末尾；注意校验只看正文不看标题） |
 
 3. Actions 页签手动跑一次 `daily-brief` 验证，之后每天自动
 

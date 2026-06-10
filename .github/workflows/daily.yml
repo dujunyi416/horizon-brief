@@ -46,6 +46,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_KEYWORD: ${{ secrets.FEISHU_KEYWORD }}
         run: python src/push.py
 
       - name: Commit dataset + state
@@ -63,9 +64,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_KEYWORD: ${{ secrets.FEISHU_KEYWORD }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          MSG="⚠️ Horizon Brief 今日运行失败，点开看日志: ${RUN_URL}"
+          MSG="⚠️ Horizon Brief ${FEISHU_KEYWORD} 今日运行失败，点开看日志: ${RUN_URL}"
           if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
             curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               --data-urlencode chat_id="${TELEGRAM_CHAT_ID}" \

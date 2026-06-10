@@ -90,7 +90,6 @@ def push_feishu(brief: dict, date_str: str) -> bool:
     webhook = os.environ.get("FEISHU_WEBHOOK_URL")
     if not webhook:
         return False
-
     content = []
     if brief.get("overview_zh"):
         content.append([{"tag": "text", "text": brief["overview_zh"]}])
@@ -110,6 +109,10 @@ def push_feishu(brief: dict, date_str: str) -> bool:
     footer = health_footer()
     if footer:
         content.append([{"tag": "text", "text": footer}])
+    # 「自定义关键词」安全策略只检查正文，不检查标题 (实测 19024 Key Words Not Found)
+    keyword = os.environ.get("FEISHU_KEYWORD", "").strip()
+    if keyword:
+        content.append([{"tag": "text", "text": f"#{keyword}"}])
 
     resp = requests.post(
         webhook,
