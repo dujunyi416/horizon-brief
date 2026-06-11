@@ -8,7 +8,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import feedparser
+import requests
 import yaml
+
+FETCH_TIMEOUT = 20  # feedparser自带抓取无超时, 一个挂起的端点会卡死整个job
+USER_AGENT = "horizon-brief/1.0 (+https://github.com/dujunyi416/horizon-brief)"
 
 ROOT = Path(__file__).resolve().parent.parent
 SEEN_PATH = ROOT / "state" / "seen.json"
@@ -71,7 +75,9 @@ def main() -> int:
     failed_sources = []
     for src in config["sources"]:
         try:
-            feed = feedparser.parse(src["url"], agent="horizon-brief/1.0 (+https://github.com)")
+            resp = requests.get(src["url"], timeout=FETCH_TIMEOUT, headers={"User-Agent": USER_AGENT})
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
         except Exception as exc:  # noqa: BLE001 - a dead feed must not kill the run
             print(f"[warn] {src['name']}: {exc}", file=sys.stderr)
             failed_sources.append(src["name"])

@@ -2,7 +2,9 @@ name: daily-brief
 
 on:
   schedule:
-    - cron: "30 21 * * *" # 07:30 Brisbane (AEST = UTC+10), covers overnight US session
+    # 目标07:30布里斯班(AEST=UTC+10)。GitHub cron在整点/半点拥挤时段延迟可达1h+,
+    # 故提前并选冷门分钟: 20:47 UTC + 实际延迟 ≈ 07:00-07:45 AEST
+    - cron: "47 20 * * *"
   workflow_dispatch:
 
 permissions:
