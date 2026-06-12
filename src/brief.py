@@ -14,6 +14,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    import json5 as _json5
+    _PERMISSIVE_PARSER = _json5.loads
+except ImportError:
+    _PERMISSIVE_PARSER = None
+
 ROOT = Path(__file__).resolve().parent.parent
 CANDIDATES_PATH = ROOT / "out" / "candidates.json"
 BRIEF_PATH = ROOT / "out" / "brief.json"
@@ -87,11 +93,30 @@ def rank(prompt: str, attempts: int = 2) -> dict:
 
 
 def extract_json(text: str) -> dict:
-    # tolerate a model that wraps output in ```json fences despite instructions
+    # tolerate ```json fences despite instructions
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"no JSON object in model output: {text[:500]}")
-    return json.loads(match.group(0))
+    raw = match.group(0)
+    # strict parse first (fastest); fall through to permissive on failure
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    if _PERMISSIVE_PARSER is not None:
+        try:
+            return _PERMISSIVE_PARSER(raw)
+        except Exception:
+            pass
+    # last resort: strip trailing commas before closing brackets/braces, then retry
+    cleaned = re.sub(r",\s*([\]}])", r"\1", raw)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"unparseable JSON after all attempts. error={exc}. "
+            f"raw_prefix={raw[:300]!r}"
+        ) from exc
 
 
 def main() -> int:
