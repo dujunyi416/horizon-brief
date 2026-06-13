@@ -18,7 +18,12 @@ ROOT = Path(__file__).resolve().parent.parent
 BRIEF_PATH = ROOT / "out" / "brief.json"
 REPORT_PATH = ROOT / "out" / "fetch_report.json"
 
-SECTION_TITLES = {"actionable": "🎯 与你直接相关", "horizon": "🔭 视野扫描"}
+SECTION_TITLES = {
+    "actionable": "🎯 直接相关",
+    "us_stocks":  "📈 美股 · 宏观",
+    "tech":       "🤖 科技 · AI",
+    "crypto":     "🪙 加密 · 链上",
+}
 TELEGRAM_MAX_LEN = 4096
 
 
@@ -50,7 +55,7 @@ def push_telegram(brief: dict, date_str: str) -> bool:
     lines = [f"<b>☀️ Horizon Brief · {date_str}</b>", ""]
     if brief.get("overview_zh"):
         lines += [html.escape(brief["overview_zh"]), ""]
-    for section in ("actionable", "horizon"):
+    for section in ("actionable", "us_stocks", "tech", "crypto"):
         items = brief.get(section, [])
         if not items:
             continue
@@ -103,7 +108,7 @@ def push_feishu(brief: dict, date_str: str) -> bool:
     if brief.get("overview_zh"):
         content.append([{"tag": "text", "text": brief["overview_zh"]}])
         content.append([{"tag": "text", "text": ""}])
-    for section in ("actionable", "horizon"):
+    for section in ("actionable", "us_stocks", "tech", "crypto"):
         items = brief.get(section, [])
         if not items:
             continue
@@ -149,7 +154,7 @@ def push_feishu(brief: dict, date_str: str) -> bool:
 
 def main() -> int:
     brief = json.loads(BRIEF_PATH.read_text(encoding="utf-8"))
-    if not brief or not (brief.get("actionable") or brief.get("horizon")):
+    if not brief or not any(brief.get(s) for s in ("actionable", "us_stocks", "tech", "crypto")):
         print("[done] empty brief, nothing to push")
         return 0
 
