@@ -127,7 +127,12 @@ def main() -> int:
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(candidates, ensure_ascii=False, indent=1), encoding="utf-8")
     REPORT_PATH.write_text(
-        json.dumps({"failed_sources": failed_sources, "n_candidates": len(candidates)}),
+        json.dumps({
+            "failed_sources": failed_sources,
+            "n_candidates": len(candidates),
+            # total_sources: push.py 用这个判断 "全挂 outage" vs "全部去重"
+            "total_sources": len(config["sources"]),
+        }),
         encoding="utf-8",
     )
     save_seen(seen)

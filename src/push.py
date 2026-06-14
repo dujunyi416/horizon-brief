@@ -36,14 +36,49 @@ def env(name: str) -> str:
     return os.environ.get(name, "").strip().lstrip("\ufeff").strip()
 
 
+def _read_report() -> dict:
+    if not REPORT_PATH.exists():
+        return {}
+    try:
+        return json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 def health_footer() -> str:
     """Surface dead feeds where they'll actually be seen — in the briefing itself."""
-    if not REPORT_PATH.exists():
-        return ""
-    failed = json.loads(REPORT_PATH.read_text(encoding="utf-8")).get("failed_sources", [])
+    failed = _read_report().get("failed_sources", [])
     if not failed:
         return ""
     return f"⚠️ 源异常: {', '.join(failed)}"
+
+
+def detect_outage_brief() -> dict | None:
+    """brief 为空时区分: 是"全部新闻今天都被 seen.json 去重了"(legit silence),
+    还是"全部 RSS 源同时挂了"(必须告警, 否则跟无新闻一样安静死)?
+
+    判定: 0 候选 + ≥50% 源失败 → outage. 候选数门槛和源失败比例都要满足,
+    避免误报 1-2 个长期腐烂源 + 真的去重无新闻的日子.
+    """
+    report = _read_report()
+    n_candidates = report.get("n_candidates", -1)
+    failed = report.get("failed_sources", [])
+    total = report.get("total_sources", 0)
+    if n_candidates != 0 or total == 0 or len(failed) < total * 0.5:
+        return None
+    sample = ", ".join(failed[:5]) + ("…" if len(failed) > 5 else "")
+    return {
+        "degraded": True,
+        "overview_zh": (
+            f"⚠️ 全部 RSS 源同时不可用：今日 0 候选，失败源 {len(failed)}/{total} 个 "
+            f"（{sample}）。可能是 runner 网络异常、Cloudflare 拦截或多源同时腐烂，"
+            f"去 Actions 看 fetch 日志。"
+        ),
+        "actionable": [],
+        "us_stocks": [],
+        "tech": [],
+        "crypto": [],
+    }
 
 
 def push_telegram(brief: dict, date_str: str) -> bool:
@@ -156,7 +191,15 @@ def push_feishu(brief: dict, date_str: str) -> bool:
 
 def main() -> int:
     brief = json.loads(BRIEF_PATH.read_text(encoding="utf-8"))
-    if not brief or not any(brief.get(s) for s in ("actionable", "us_stocks", "tech", "crypto")):
+    is_empty = not brief or not any(brief.get(s) for s in ("actionable", "us_stocks", "tech", "crypto"))
+    if is_empty:
+        # brief 空了 — 区分"全部去重"(legit) vs "全部源挂"(必须告警). 后者覆盖 brief
+        outage = detect_outage_brief()
+        if outage:
+            print("[warn] all sources down — pushing outage alert", file=sys.stderr)
+            brief = outage
+            is_empty = False
+    if is_empty:
         print("[done] empty brief, nothing to push")
         return 0
 

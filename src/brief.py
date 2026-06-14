@@ -179,6 +179,20 @@ def extract_json(text: str) -> dict:
         ) from exc
 
 
+def _classify_failure(reason: str) -> str:
+    """根据 rank 失败原因给出具体修复指引 — 让降级简报本身就告诉用户怎么救.
+    黑屏失败时用户最缺的是"我接下来要干什么", 不是"出了什么错"."""
+    r = (reason or "").lower()
+    if "claude exited" in r or "claude cli not found" in r:
+        return ("可能是 CLAUDE_CODE_OAUTH_TOKEN 失效。本地跑 `claude setup-token`，"
+                "拿到 token 后 `gh secret set CLAUDE_CODE_OAUTH_TOKEN -b <新token>`。")
+    if "did not converge" in r or "unparseable json" in r:
+        return "模型 JSON 输出连裸引号修复器都救不回来，查看 out/brief.raw.txt 复盘。"
+    if "timeout" in r or "timed out" in r:
+        return "claude CLI 超时 (API 慢或网络异常)，无需立即处理，下次 cron 再看。"
+    return f"原因: {reason.split(':', 1)[-1].strip()[:120]}"
+
+
 def build_degraded_brief(candidates: list, reason: str) -> dict:
     """rank() 全军覆没时用 fetch 的 topic 字段兜底分桶, 推一份"原始头条"简报.
     黑屏比有缺陷的简报更糟 — 让用户至少看到今天发生了什么. brief.degraded=True
@@ -188,10 +202,11 @@ def build_degraded_brief(candidates: list, reason: str) -> dict:
         section = TOPIC_TO_SECTION.get(c.get("topic", ""))
         if section:
             buckets[section].append(c)
+    hint = _classify_failure(reason)
     brief = {
         "degraded": True,
         "degraded_reason": reason,
-        "overview_zh": f"⚠️ 今日 ranking 失败，以下按 topic 兜底取最新头条（候选 n={len(candidates)}）。原始输出: out/brief.raw.txt",
+        "overview_zh": f"⚠️ 今日 ranking 失败，按 topic 兜底头条（n={len(candidates)}）。{hint}",
         "actionable": [],
     }
     for section, items in buckets.items():
