@@ -52,7 +52,8 @@ def push_telegram(brief: dict, date_str: str) -> bool:
     if not token or not chat_id:
         return False
 
-    lines = [f"<b>☀️ Horizon Brief · {date_str}</b>", ""]
+    title_emoji = "⚠️" if brief.get("degraded") else "☀️"
+    lines = [f"<b>{title_emoji} Horizon Brief · {date_str}</b>", ""]
     if brief.get("overview_zh"):
         lines += [html.escape(brief["overview_zh"]), ""]
     for section in ("actionable", "us_stocks", "tech", "crypto"):
@@ -134,7 +135,7 @@ def push_feishu(brief: dict, date_str: str) -> bool:
             "msg_type": "post",
             "content": {
                 "post": {
-                    "zh_cn": {"title": f"☀️ Horizon Brief · {date_str}", "content": content}
+                    "zh_cn": {"title": f"{'⚠️' if brief.get('degraded') else '☀️'} Horizon Brief · {date_str}", "content": content}
                 }
             },
         },
@@ -145,7 +146,8 @@ def push_feishu(brief: dict, date_str: str) -> bool:
         body = resp.json()
     except ValueError:
         pass
-    if not resp.ok or body.get("code") not in (0, None):
+    # 飞书成功响应必带 code:0; 缺 code 字段一律视为失败 (此前 (0, None) 兜底反而吃掉了真实错误)
+    if not resp.ok or body.get("code", -1) != 0:
         print(f"[error] feishu: {resp.status_code} {resp.text[:500]}", file=sys.stderr)
         return False
     print("[ok] pushed to Feishu")
