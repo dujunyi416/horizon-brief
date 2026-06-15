@@ -44,6 +44,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           AGENDA: ${{ secrets.AGENDA }}
+          CLAUDE_MODEL: claude-opus-4-6
         run: python src/brief.py
 
       - name: Push briefing
