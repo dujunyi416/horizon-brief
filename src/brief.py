@@ -14,6 +14,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
+
 try:
     import json5 as _json5
     _PERMISSIVE_PARSER = _json5.loads
@@ -23,7 +25,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 CANDIDATES_PATH = ROOT / "out" / "candidates.json"
 BRIEF_PATH = ROOT / "out" / "brief.json"
-RAW_PATH = ROOT / "out" / "brief.raw.txt"  # 上一次 Claude 原始输出, 失败时尸检入口
+RAW_PATH = ROOT / "out" / "brief.raw.txt"  # 上一次模型原始输出, 失败时尸检入口
 
 SECTIONS = ("actionable", "us_stocks", "tech", "crypto")
 # 兜底分桶: 把 sources.yaml 里实际使用的 topic 映射到推送的圈子区.
@@ -83,6 +85,44 @@ PROMPT_TEMPLATE = """你是一个为同时关注美股、科技、加密三个�
 """
 
 
+def _write_raw(text: str) -> None:
+    try:
+        RAW_PATH.parent.mkdir(parents=True, exist_ok=True)
+        RAW_PATH.write_text(text or "", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def call_github_models(prompt: str) -> str:
+    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN not set")
+    model = os.environ.get("GITHUB_MODELS_MODEL", "openai/gpt-4.1")
+    base = os.environ.get("GITHUB_MODELS_ENDPOINT", "https://models.github.ai/inference").rstrip("/")
+    resp = requests.post(
+        f"{base}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        json={"model": model, "messages": [{"role": "user", "content": prompt}]},
+        timeout=600,
+    )
+    if not resp.ok:
+        _write_raw(resp.text)
+        raise RuntimeError(f"github-models HTTP {resp.status_code}: {resp.text[:2000]}")
+    try:
+        content = resp.json()["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, json.JSONDecodeError) as exc:
+        _write_raw(resp.text)
+        raise RuntimeError(f"github-models bad response: {resp.text[:500]}") from exc
+    if not content:
+        raise RuntimeError("github-models returned empty content")
+    _write_raw(content)
+    return content
+
+
 def call_claude(prompt: str) -> str:
     exe = shutil.which("claude") or shutil.which("claude.cmd")
     if not exe:
@@ -94,15 +134,37 @@ def call_claude(prompt: str) -> str:
     result = subprocess.run(
         cmd, input=prompt, capture_output=True, text=True, encoding="utf-8", timeout=600
     )
-    # 无论成败都落盘原始输出, 失败时是复盘唯一证据 (CI 日志只会截断 prefix)
-    try:
-        RAW_PATH.parent.mkdir(parents=True, exist_ok=True)
-        RAW_PATH.write_text(result.stdout or "", encoding="utf-8")
-    except OSError:
-        pass
+    _write_raw(result.stdout or "")
     if result.returncode != 0:
         raise RuntimeError(f"claude exited {result.returncode}: {result.stderr[:2000]}")
     return result.stdout
+
+
+_PROVIDERS = {
+    "github-models": call_github_models,
+    "claude": call_claude,
+}
+
+
+def call_llm(prompt: str) -> str:
+    """Try providers in LLM_PROVIDERS order (default: github-models, then claude)."""
+    raw = os.environ.get("LLM_PROVIDERS", "github-models,claude")
+    providers = [p.strip() for p in raw.split(",") if p.strip()]
+    errors: list[str] = []
+    for name in providers:
+        fn = _PROVIDERS.get(name)
+        if fn is None:
+            errors.append(f"{name}: unknown provider")
+            continue
+        try:
+            out = fn(prompt)
+            if name != providers[0]:
+                print(f"[info] ranked via fallback provider: {name}", file=sys.stderr)
+            return out
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+            print(f"[warn] provider {name} failed: {exc}", file=sys.stderr)
+    raise RuntimeError("all LLM providers failed: " + "; ".join(errors))
 
 
 class RankFailure(RuntimeError):
@@ -110,12 +172,12 @@ class RankFailure(RuntimeError):
 
 
 def rank(prompt: str, attempts: int = 2) -> dict:
-    """Call Claude and parse JSON, retrying once — transient API errors and
+    """Call LLM and parse JSON, retrying once — transient API errors and
     malformed JSON are the two most likely daily failure modes."""
     last_exc: Exception = RuntimeError("unreachable")
     for i in range(attempts):
         try:
-            return extract_json(call_claude(prompt))
+            return extract_json(call_llm(prompt))
         except (RuntimeError, ValueError, json.JSONDecodeError) as exc:
             last_exc = exc
             print(f"[warn] rank attempt {i + 1}/{attempts} failed: {exc}", file=sys.stderr)
@@ -183,9 +245,14 @@ def _classify_failure(reason: str) -> str:
     """根据 rank 失败原因给出具体修复指引 — 让降级简报本身就告诉用户怎么救.
     黑屏失败时用户最缺的是"我接下来要干什么", 不是"出了什么错"."""
     r = (reason or "").lower()
+    if "github-models" in r or "github_token not set" in r:
+        return ("GitHub Models 调用失败。Actions 需 permissions.models: read；"
+                "本地调试需 PAT (models scope) 或设 LLM_PROVIDERS=claude。")
     if "claude exited" in r or "claude cli not found" in r:
         return ("可能是 CLAUDE_CODE_OAUTH_TOKEN 失效。本地跑 `claude setup-token`，"
                 "拿到 token 后 `gh secret set CLAUDE_CODE_OAUTH_TOKEN -b <新token>`。")
+    if "all llm providers failed" in r:
+        return "GitHub Models 与 Claude 均失败，见 Actions 日志或 out/brief.raw.txt。"
     if "did not converge" in r or "unparseable json" in r:
         return "模型 JSON 输出连裸引号修复器都救不回来，查看 out/brief.raw.txt 复盘。"
     if "timeout" in r or "timed out" in r:

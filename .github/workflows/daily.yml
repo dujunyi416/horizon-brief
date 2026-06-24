@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  models: read   # GitHub Models 免费额度 (GITHUB_TOKEN 认证)
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # Node.js 20 deprecated on runners 2026-06-16
@@ -40,8 +41,11 @@ jobs:
       - name: Fetch sources
         run: python src/fetch.py
 
-      - name: Rank with Claude
+      - name: Rank with LLM
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_PROVIDERS: github-models,claude
+          GITHUB_MODELS_MODEL: openai/gpt-4.1
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           AGENDA: ${{ secrets.AGENDA }}
           CLAUDE_MODEL: claude-opus-4-6

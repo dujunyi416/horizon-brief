@@ -17,6 +17,14 @@ import push
 
 # === brief._classify_failure ===
 
+def test_classify_github_models():
+    msg = _classify_failure("all LLM providers failed: github-models: HTTP 403")
+    assert "models: read" in msg
+
+def test_classify_all_providers_failed():
+    msg = _classify_failure("all 2 rank attempts failed: all LLM providers failed: x")
+    assert "GitHub Models" in msg and "Claude" in msg
+
 def test_classify_token_expired():
     msg = _classify_failure("all 2 rank attempts failed: claude exited 1: ")
     assert "CLAUDE_CODE_OAUTH_TOKEN" in msg
