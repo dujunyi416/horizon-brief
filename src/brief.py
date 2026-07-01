@@ -187,10 +187,15 @@ def select_llm_pool(
 
     picked: list = []
     picked_ids: set[int] = set()
+    remaining = pool_size
     for pool, quota in quotas.items():
-        for c in buckets.get(pool, [])[:quota]:
+        if remaining <= 0:
+            break
+        take = min(quota, remaining)
+        for c in buckets.get(pool, [])[:take]:
             picked.append(c)
             picked_ids.add(c["id"])
+        remaining -= take
 
     if len(picked) < pool_size:
         overflow: list = []
@@ -314,6 +319,8 @@ def _classify_failure(reason: str) -> str:
     if "github-models" in r or "github_token not set" in r:
         return ("GitHub Models 调用失败。Actions 需 permissions.models: read；"
                 "本地调试需 PAT (models scope) 或设 LLM_PROVIDERS=claude。")
+    if "timeout" in r or "timed out" in r:
+        return "LLM 调用超时 (API 慢或网络异常)，无需立即处理，下次 cron 再看。"
     if "claude exited" in r or "claude cli not found" in r:
         return ("可能是 CLAUDE_CODE_OAUTH_TOKEN 失效。本地跑 `claude setup-token`，"
                 "拿到 token 后 `gh secret set CLAUDE_CODE_OAUTH_TOKEN -b <新token>`。")
@@ -321,8 +328,6 @@ def _classify_failure(reason: str) -> str:
         return "GitHub Models 调用失败，见 Actions 日志或 out/brief.raw.txt。"
     if "did not converge" in r or "unparseable json" in r:
         return "模型 JSON 输出连裸引号修复器都救不回来，查看 out/brief.raw.txt 复盘。"
-    if "timeout" in r or "timed out" in r:
-        return "claude CLI 超时 (API 慢或网络异常)，无需立即处理，下次 cron 再看。"
     return f"原因: {reason.split(':', 1)[-1].strip()[:120]}"
 
 
@@ -410,6 +415,7 @@ def main() -> int:
             kept.append(item)
         brief[section] = kept
 
+    BRIEF_PATH.parent.mkdir(parents=True, exist_ok=True)
     BRIEF_PATH.write_text(json.dumps(brief, ensure_ascii=False, indent=1), encoding="utf-8")
 
     # public point-in-time dataset: 同日多次运行 (cron + 手动 dispatch) 合并而非

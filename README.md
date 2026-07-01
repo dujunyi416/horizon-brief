@@ -82,9 +82,11 @@ python src/push.py
 
 本地若要用 Claude 兜底，可设 `$env:LLM_PROVIDERS = "github-models,claude"` 并安装 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) + `CLAUDE_CODE_OAUTH_TOKEN`；**Actions 默认不走 Claude**。
 
+> 本地非 UTC 时区（如布里斯班 AEST）跑 `fetch.py` 时，RSS 发布时间按 UTC 解析，36h 窗口与排序与 Actions 一致。无发布时间的 RSS 条目会被跳过，避免陈旧新闻混入池子。
+
 ## 调整口味
 
-- 换源/加源：编辑 [config/sources.yaml](config/sources.yaml)（死源只会告警不会让运行失败）
+- 换源/加源：编辑 [config/sources.yaml](config/sources.yaml)（死源只会告警不会让运行失败）；**新 topic 须同步 [src/brief.py](src/brief.py) 的 `TOPIC_TO_SECTION`**
 - 抓取池上限：`max_candidates`（默认 120，影响 `data/` 全量）
 - LLM 子池：`llm_pool_size` + `llm_pool_quotas`（默认 60 条分层抽样，只影响送模型的条数）
 - 改排序哲学：prompt 在 [src/brief.py](src/brief.py) 顶部

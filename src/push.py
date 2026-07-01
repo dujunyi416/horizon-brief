@@ -189,9 +189,24 @@ def push_feishu(brief: dict, date_str: str) -> bool:
     return True
 
 
+def brief_has_content(brief: dict) -> bool:
+    if not brief:
+        return False
+    if brief.get("overview_zh"):
+        return True
+    return any(brief.get(s) for s in ("actionable", "us_stocks", "tech", "crypto"))
+
+
 def main() -> int:
-    brief = json.loads(BRIEF_PATH.read_text(encoding="utf-8"))
-    is_empty = not brief or not any(brief.get(s) for s in ("actionable", "us_stocks", "tech", "crypto"))
+    if not BRIEF_PATH.exists():
+        print("[error] brief.json not found — run brief.py first", file=sys.stderr)
+        return 1
+    try:
+        brief = json.loads(BRIEF_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"[error] brief.json unreadable: {exc}", file=sys.stderr)
+        return 1
+    is_empty = not brief_has_content(brief)
     if is_empty:
         # brief 空了 — 区分"全部去重"(legit) vs "全部源挂"(必须告警). 后者覆盖 brief
         outage = detect_outage_brief()

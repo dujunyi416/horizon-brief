@@ -42,7 +42,9 @@ def parse_published(entry) -> datetime | None:
     for attr in ("published_parsed", "updated_parsed"):
         t = getattr(entry, attr, None)
         if t:
-            return datetime.fromtimestamp(time.mktime(t), tz=timezone.utc)
+            # feedparser struct_time is UTC; mktime() treats it as local time and
+            # skews the window filter on non-UTC machines (e.g. AEST is −10 h).
+            return datetime(*t[:6], tzinfo=timezone.utc)
     return None
 
 
@@ -88,7 +90,12 @@ def main() -> int:
             continue
 
         taken = 0
-        for entry in feed.entries:
+        entries = sorted(
+            feed.entries,
+            key=lambda e: parse_published(e) or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        for entry in entries:
             if taken >= src.get("cap", 10):
                 break
             url = getattr(entry, "link", "") or ""
@@ -96,7 +103,9 @@ def main() -> int:
             if not url or not title:
                 continue
             published = parse_published(entry)
-            if published and now - published > window:
+            if not published:
+                continue
+            if now - published > window:
                 continue
             key = item_key(url, title)
             if key in seen:

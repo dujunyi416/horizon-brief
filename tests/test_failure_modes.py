@@ -45,8 +45,7 @@ def test_classify_fixer_no_converge():
 
 def test_classify_timeout():
     msg = _classify_failure("claude exited 1: subprocess timed out after 600s")
-    # 包含 'claude exited' 优先匹配 token 分支 — 实际超时不会有 'claude exited' 而是 TimeoutExpired
-    # 单独测纯 timeout 串
+    assert "API 慢" in msg or "网络" in msg
     msg2 = _classify_failure("subprocess.TimeoutExpired: claude timeout")
     assert "API 慢" in msg2 or "网络" in msg2
 
@@ -106,6 +105,23 @@ def test_outage_missing_total_sources_is_safe():
     """老格式 report (没有 total_sources 字段) 不能误报 outage"""
     _write_report({"n_candidates": 0, "failed_sources": ["A", "B", "C"]})
     assert push.detect_outage_brief() is None
+
+
+# === push.brief_has_content / missing brief ===
+
+def test_push_overview_only_is_not_empty():
+    brief = {"overview_zh": "今日综述", "actionable": [], "us_stocks": [], "tech": [], "crypto": []}
+    assert push.brief_has_content(brief) is True
+
+def test_push_missing_brief_returns_error():
+    import tempfile
+    missing = Path(tempfile.mkdtemp()) / "brief.json"
+    orig = push.BRIEF_PATH
+    try:
+        push.BRIEF_PATH = missing
+        assert push.main() == 1
+    finally:
+        push.BRIEF_PATH = orig
 
 
 if __name__ == "__main__":
