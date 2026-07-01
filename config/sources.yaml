@@ -3,7 +3,15 @@
 # Edit freely — fetch.py tolerates dead feeds and just logs a warning.
 
 window_hours: 36          # only items published within this window are considered
-max_candidates: 120       # hard cap on what goes into the LLM prompt
+max_candidates: 120       # hard cap on fetch pool (all rows land in data/)
+
+# LLM ranking pool: stratified sample from fetch pool (title-only prompt).
+# Full fetch pool is unchanged — only this subset goes to GitHub Models.
+llm_pool_size: 60
+llm_pool_quotas:
+  us_stocks: 18   # macro, markets, finance, china
+  tech: 18
+  crypto: 12
 
 sources:
   # ---- 金融 / 宏观 (6) ----

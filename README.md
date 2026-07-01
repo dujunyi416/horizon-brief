@@ -1,9 +1,9 @@
 # ☀️ Horizon Brief
 
-**一个开源的、agenda 感知的每日新闻筛选引擎。** 每天早上从 ~14 个精选源（宏观/市场/前沿科技/crypto/国内）抓取最近 36 小时的新闻，用一次 Claude 调用按「这会不会改变*你的*仓位或研究议程」排序，推送一份双区简报到 Telegram / 飞书：
+**一个开源的、agenda 感知的每日新闻筛选引擎。** 每天早上从 ~14 个精选源（宏观/市场/前沿科技/crypto/国内）抓取最近 36 小时的新闻，用 **GitHub Models（gpt-4.1）** 按「这会不会改变*你的*仓位或研究议程」排序，推送一份简报到 Telegram / 飞书：
 
-- **🎯 与你直接相关** — 与你的仓位、研究议程、关注催化剂挂钩的 3-5 条
-- **🔭 视野扫描** — 全市场与前沿科技的结构性信号 3-5 条，刻意避开你的回音室
+- **🎯 直接相关** — 与你的仓位、研究议程、关注催化剂挂钩的事件
+- **📈 美股 · 宏观** / **🤖 科技 · AI** / **🪙 加密 · 链上** — 三个圈子并列，各自 3–5 条结构性信号
 
 通用简报满大街都是；这个工具的全部价值在于排序函数里注入了**你自己的状态**——而那份状态（`AGENDA` secret）永远不进仓库。
 
@@ -11,18 +11,26 @@
 
 - 不是实时告警（每天一次，GitHub Actions cron）
 - 不是多用户 SaaS——**fork 即订阅**：fork 本仓库，填上自己的 secrets，就得到自己的个性化筛选器
-- （暂时）不是量化因子。但 `data/` 目录从第一天起就以点态（point-in-time）格式记录每条候选新闻的发布/抓取时间戳、主题标签和通用重要性分——如果未来想检验「新闻信号对期权波动率有没有预测力」，无 look-ahead 偏差的原料已经在了
+- （暂时）不是量化因子。但 `data/` 目录从第一天起就以点态（point-in-time）格式记录**全量抓取池**的发布/抓取时间戳、主题标签，以及入选条的通用重要性分——如果未来想检验「新闻信号对期权波动率有没有预测力」，无 look-ahead 偏差的原料已经在了
 
 ## 架构
 
 ```
-GitHub Actions (每天 21:30 UTC = 布里斯班 07:30)
-  └─ src/fetch.py   拉 RSS → 36h 窗口 + 去重 + 每源上限 → out/candidates.json
-  └─ src/brief.py   单次 claude -p 调用（注入 AGENDA secret）→ out/brief.json
-  │                 同时把通用元数据+评分写入 data/YYYY-MM-DD.jsonl（公开数据集）
+GitHub Actions (每天 20:47 UTC ≈ 布里斯班 07:00–07:45)
+  └─ src/fetch.py   拉 RSS → 36h 窗口 + 去重 + 每源上限 → out/candidates.json（最多 120 条全量池）
+  └─ src/brief.py   从全量池分层抽样 ~60 条（仅 title）→ GitHub Models gpt-4.1 排序
+  │                 入选条从本地 candidates 补回 summary（不额外消耗 token）
+  │                 → out/brief.json；全量池 + 元数据写入 data/YYYY-MM-DD.jsonl
   └─ src/push.py    推送 Telegram / 飞书（配了哪个推哪个）
   └─ commit data/ + state/ 回仓库
 ```
+
+**两层数据：**
+
+| 层 | 规模 | 用途 |
+|---|---|---|
+| 抓取池 | 最多 120 条/天 | 全量落 `data/`，供日后分析；字段含 `llm_pool`（是否进入模型子池） |
+| LLM 子池 | 60 条（按圈子分层） | 仅 title 送模型，适配 GitHub Models 免费档 8k input 上限 |
 
 个性化的部分（`out/`，含「为什么与你相关」）被 gitignore；入库的只有通用元数据。
 
@@ -33,16 +41,19 @@ GitHub Actions (每天 21:30 UTC = 布里斯班 07:30)
 
    | Secret | 必需 | 怎么拿 |
    |---|---|---|
-   | `CLAUDE_CODE_OAUTH_TOKEN` | ✅ | 本机装 Claude Code 后运行 `claude setup-token`（用 Pro/Max 订阅额度，零边际成本） |
    | `AGENDA` | ✅ | 照 [agenda.example.md](agenda.example.md) 写你自己的，整个文件内容贴进去 |
    | `TELEGRAM_BOT_TOKEN` | 二选一 | 找 [@BotFather](https://t.me/BotFather) 建 bot |
    | `TELEGRAM_CHAT_ID` | 二选一 | 给 bot 发条消息后访问 `api.telegram.org/bot<token>/getUpdates` 取 chat id |
    | `FEISHU_WEBHOOK_URL` | 二选一 | 飞书群 → 设置 → 群机器人 → 添加自定义机器人，复制 webhook |
    | `FEISHU_KEYWORD` | 可选 | 若机器人开了「自定义关键词」安全策略，填那个关键词（以 #话题 形式附在正文末尾；注意校验只看正文不看标题） |
 
+   > **GitHub Models** 在 Actions 里用内置 `GITHUB_TOKEN` 认证（workflow 已设 `permissions.models: read`），**不需要**额外 API key，也**不需要** Claude token。
+
 3. Actions 页签手动跑一次 `daily-brief` 验证，之后每天自动
 
-任何一步失败（token 过期、源全挂、推送被限流）都会向已配置的渠道推一条**失败告警**带运行日志链接——简报工具最危险的死法是静默死亡，这里把它焊死了。简报末尾还会自动带"⚠️ 源异常"脚注，源腐烂时你会在第一时间看到。
+任何一步失败（Models 限流、源全挂、推送被限流）都会向已配置的渠道推一条**失败告警**带运行日志链接——简报工具最危险的死法是静默死亡，这里把它焊死了。简报末尾还会自动带"⚠️ 源异常"脚注，源腐烂时你会在第一时间看到。
+
+成功运行时日志应出现 `[info] llm pool: 60/… candidates (title-only)`，且**没有** `ranked via fallback provider: claude`。
 
 ## 保持 agenda 新鲜（重要）
 
@@ -62,15 +73,22 @@ gh secret set AGENDA -b (Get-Content agenda.md -Raw)
 pip install -r requirements.txt
 python src/fetch.py
 $env:AGENDA = Get-Content agenda.md -Raw   # 你的私有 agenda（已 gitignore）
-python src/brief.py                         # 需要本机已登录 claude CLI
+$env:GITHUB_TOKEN = gh auth token          # 或 PAT（models:read）
+$env:LLM_PROVIDERS = "github-models"
+python src/brief.py
 $env:TELEGRAM_BOT_TOKEN = "..."; $env:TELEGRAM_CHAT_ID = "..."
 python src/push.py
 ```
 
+本地若要用 Claude 兜底，可设 `$env:LLM_PROVIDERS = "github-models,claude"` 并安装 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) + `CLAUDE_CODE_OAUTH_TOKEN`；**Actions 默认不走 Claude**。
+
 ## 调整口味
 
 - 换源/加源：编辑 [config/sources.yaml](config/sources.yaml)（死源只会告警不会让运行失败）
+- 抓取池上限：`max_candidates`（默认 120，影响 `data/` 全量）
+- LLM 子池：`llm_pool_size` + `llm_pool_quotas`（默认 60 条分层抽样，只影响送模型的条数）
 - 改排序哲学：prompt 在 [src/brief.py](src/brief.py) 顶部
+- 换模型：workflow 里 `GITHUB_MODELS_MODEL`（默认 `openai/gpt-4.1`）
 - 改推送时间：[.github/workflows/daily.yml](.github/workflows/daily.yml) 的 cron
 
 ## License

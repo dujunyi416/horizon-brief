@@ -23,7 +23,8 @@ def test_classify_github_models():
 
 def test_classify_all_providers_failed():
     msg = _classify_failure("all 2 rank attempts failed: all LLM providers failed: x")
-    assert "GitHub Models" in msg and "Claude" in msg
+    assert "GitHub Models" in msg
+    assert "Claude" not in msg
 
 def test_classify_token_expired():
     msg = _classify_failure("all 2 rank attempts failed: claude exited 1: ")
