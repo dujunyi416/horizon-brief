@@ -36,13 +36,14 @@ TOPIC_TO_SECTION = {
     "markets":  "us_stocks",
     "finance":  "us_stocks",
     "china":    "us_stocks",
+    "options":  "us_stocks",
     "tech":     "tech",
     "research": "tech",
     "crypto":   "crypto",
 }
 TOPIC_TO_POOL = TOPIC_TO_SECTION  # stratified LLM pool uses the same topic map
 DEFAULT_LLM_POOL_SIZE = 60
-DEFAULT_LLM_POOL_QUOTAS = {"us_stocks": 18, "tech": 18, "crypto": 12}
+DEFAULT_LLM_POOL_QUOTAS = {"us_stocks": 26, "tech": 14, "crypto": 12}
 
 PROMPT_TEMPLATE = """你是一个为同时关注美股、科技、加密三个圈子的量化研究者服务的每日新闻筛选引擎。今天是 {today}。
 
@@ -61,7 +62,7 @@ PROMPT_TEMPLATE = """你是一个为同时关注美股、科技、加密三个�
 {{
   "overview_zh": "两三句话的今日综述：隔夜世界发生了什么、对三个圈子各自的整体含义",
   "actionable": [0到3条，跨圈子高门槛；只放今天真正影响持仓或研究催化剂的事件，没有就留空数组],
-  "us_stocks": [3到5条，美股/宏观/利率/财报/地缘政治],
+  "us_stocks": [3到5条，美股/SPX/期权波动率/利率/财报/地缘政治],
   "tech": [3到5条，AI/科技/前沿研究/算力/监管],
   "crypto": [3到5条，加密货币/链上/监管/交易所/ETF]
 }}
@@ -69,7 +70,7 @@ PROMPT_TEMPLATE = """你是一个为同时关注美股、科技、加密三个�
 每条的格式：
 {{
   "id": 候选的id(整数),
-  "circle": "该条新闻归属的圈子，从 us-stocks/tech/crypto/macro/china 中选一个",
+  "circle": "该条新闻归属的圈子，从 us-stocks/tech/crypto/macro/china/options 中选一个",
   "headline_zh": "一句话中文标题(可意译)",
   "why_zh": "一句话说明为什么值得你看(actionable区点明与agenda哪项直接相关；三圈子区说明该圈子内的重要性)",
   "score": 通用重要性0-10(不考虑agenda、仅按影响面x新颖度x可信度打分，保留一位小数),
@@ -78,6 +79,7 @@ PROMPT_TEMPLATE = """你是一个为同时关注美股、科技、加密三个�
 
 规则：
 - 三个圈子（us_stocks/tech/crypto）是并列平等的，各自独立按圈子内重要性排序。
+- us_stocks 栏优先 SPX/VIX/利率路径/指数期权期限结构/OPEX/财报 IV；个股故事除非明显影响指数或持仓，否则让给宏观和波动率。
 - 美股/科技新闻不要在 why_zh 里强行推演到 BTC 含义，除非有清晰直接的 crypto 传导路径。
 - tags 必须来自新闻自身领域，禁止仅因 agenda 偏好就硬塞 crypto/btc 标签（例如不要把量子计算挂 crypto-infrastructure、不要把道指上涨挂 btc-spot）。
 - actionable 区是高门槛"今天就要看"的事件——不要把普通 horizon 级新闻强升为 actionable，宁空勿滥。

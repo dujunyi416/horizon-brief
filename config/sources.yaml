@@ -3,18 +3,18 @@
 # Edit freely — fetch.py tolerates dead feeds and just logs a warning.
 
 window_hours: 36          # only items published within this window are considered
-max_candidates: 120       # hard cap on fetch pool (all rows land in data/)
+max_candidates: 140       # hard cap on fetch pool (all rows land in data/)
 
 # LLM ranking pool: stratified sample from fetch pool (title-only prompt).
-# Full fetch pool is unchanged — only this subset goes to GitHub Models.
+# 美股偏厚：PhD 是 SPX 长期期权；加密是个人量化，不是研究主场。
 llm_pool_size: 60
 llm_pool_quotas:
-  us_stocks: 18   # macro, markets, finance, china
-  tech: 18
+  us_stocks: 26   # macro, markets, finance, options, china
+  tech: 14
   crypto: 12
 
 sources:
-  # ---- 金融 / 宏观 (6) ----
+  # ---- 金融 / 宏观 / 期权 (8) ----
   - name: Fed Press Releases
     url: https://www.federalreserve.gov/feeds/press_all.xml
     topic: macro
@@ -34,11 +34,19 @@ sources:
   - name: Google News Business
     url: https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en
     topic: finance
-    cap: 12
+    cap: 8
   - name: Calculated Risk
     url: https://www.calculatedriskblog.com/feeds/posts/default
     topic: macro
     cap: 6
+  - name: MarketWatch Pulse
+    url: https://feeds.marketwatch.com/marketwatch/marketpulse/
+    topic: markets
+    cap: 10
+  - name: Google News SPX Options
+    url: https://news.google.com/rss/search?q=SPX+OR+VIX+OR+%22S%26P+500%22+options+when:2d&hl=en-US&gl=US&ceid=US:en
+    topic: options
+    cap: 8
 
   # ---- 前沿科技 (4) ----
   - name: Hacker News Frontpage
@@ -68,12 +76,8 @@ sources:
     topic: crypto
     cap: 8
 
-  # ---- 国内 (2) ----
-  - name: 36氪
-    url: https://36kr.com/feed
-    topic: china
-    cap: 10
+  # ---- 国内 (1) ----
   - name: Google News 中文财经
     url: https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=zh-CN&gl=CN&ceid=CN:zh-Hans
     topic: china
-    cap: 10
+    cap: 6
