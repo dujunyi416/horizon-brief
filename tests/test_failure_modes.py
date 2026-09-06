@@ -17,13 +17,17 @@ import push
 
 # === brief._classify_failure ===
 
+def test_classify_gemini():
+    msg = _classify_failure("all LLM providers failed: gemini: HTTP 401")
+    assert "GEMINI_API_KEY" in msg
+
 def test_classify_github_models():
-    msg = _classify_failure("all LLM providers failed: github-models: HTTP 403")
-    assert "models: read" in msg
+    msg = _classify_failure("all LLM providers failed: github-models: HTTP 410")
+    assert "2026-07-30" in msg or "GEMINI_API_KEY" in msg
 
 def test_classify_all_providers_failed():
     msg = _classify_failure("all 2 rank attempts failed: all LLM providers failed: x")
-    assert "GitHub Models" in msg
+    assert "Actions" in msg or "brief.raw.txt" in msg
     assert "Claude" not in msg
 
 def test_classify_token_expired():

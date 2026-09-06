@@ -1,4 +1,4 @@
-"""Stage 2: rank a stratified LLM pool via GitHub Models, write out/brief.json + data/.
+"""Stage 2: rank a stratified LLM pool via Gemini, write out/brief.json + data/.
 
 Fetch keeps the full candidate pool (up to max_candidates) for analysis; only a
 title-only stratified subset is sent to the LLM. Selected items get summary
@@ -97,6 +97,45 @@ def _write_raw(text: str) -> None:
         pass
 
 
+def _env(name: str) -> str:
+    return os.environ.get(name, "").strip().lstrip("\ufeff").strip()
+
+
+def call_gemini(prompt: str) -> str:
+    key = _env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY")
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY not set")
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    base = os.environ.get(
+        "GEMINI_ENDPOINT", "https://generativelanguage.googleapis.com/v1beta"
+    ).rstrip("/")
+    resp = requests.post(
+        f"{base}/models/{model}:generateContent",
+        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+        json={
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json"},
+        },
+        timeout=600,
+    )
+    if not resp.ok:
+        _write_raw(resp.text)
+        raise RuntimeError(f"gemini HTTP {resp.status_code}: {resp.text[:2000]}")
+    try:
+        parts = resp.json()["candidates"][0]["content"]["parts"]
+        content = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+        if not content:
+            content = "".join(p.get("text", "") for p in parts)
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+        _write_raw(resp.text)
+        raise RuntimeError(f"gemini bad response: {resp.text[:500]}") from exc
+    if not content:
+        _write_raw(resp.text)
+        raise RuntimeError("gemini returned empty content")
+    _write_raw(content)
+    return content
+
+
 def call_github_models(prompt: str) -> str:
     token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
     if not token:
@@ -145,6 +184,7 @@ def call_claude(prompt: str) -> str:
 
 
 _PROVIDERS = {
+    "gemini": call_gemini,
     "github-models": call_github_models,
     "claude": call_claude,
 }
@@ -218,8 +258,8 @@ def slim_for_llm(pool: list) -> str:
 
 
 def call_llm(prompt: str) -> str:
-    """Try providers in LLM_PROVIDERS order (default: github-models only)."""
-    raw = os.environ.get("LLM_PROVIDERS", "github-models")
+    """Try providers in LLM_PROVIDERS order (default: gemini only)."""
+    raw = os.environ.get("LLM_PROVIDERS", "gemini")
     providers = [p.strip() for p in raw.split(",") if p.strip()]
     errors: list[str] = []
     for name in providers:
@@ -316,16 +356,19 @@ def _classify_failure(reason: str) -> str:
     """根据 rank 失败原因给出具体修复指引 — 让降级简报本身就告诉用户怎么救.
     黑屏失败时用户最缺的是"我接下来要干什么", 不是"出了什么错"."""
     r = (reason or "").lower()
+    if "gemini" in r or "gemini_api_key not set" in r:
+        return ("Gemini 调用失败。到 https://aistudio.google.com/apikey 建 key，"
+                "然后 `gh secret set GEMINI_API_KEY -b <key>`。")
     if "github-models" in r or "github_token not set" in r:
-        return ("GitHub Models 调用失败。Actions 需 permissions.models: read；"
-                "本地调试需 PAT (models scope) 或设 LLM_PROVIDERS=claude。")
+        return ("GitHub Models 已于 2026-07-30 下线。改用 Gemini：设 GEMINI_API_KEY，"
+                "并把 LLM_PROVIDERS 设为 gemini。")
     if "timeout" in r or "timed out" in r:
         return "LLM 调用超时 (API 慢或网络异常)，无需立即处理，下次 cron 再看。"
     if "claude exited" in r or "claude cli not found" in r:
         return ("可能是 CLAUDE_CODE_OAUTH_TOKEN 失效。本地跑 `claude setup-token`，"
                 "拿到 token 后 `gh secret set CLAUDE_CODE_OAUTH_TOKEN -b <新token>`。")
     if "all llm providers failed" in r:
-        return "GitHub Models 调用失败，见 Actions 日志或 out/brief.raw.txt。"
+        return "LLM 调用失败，见 Actions 日志或 out/brief.raw.txt。"
     if "did not converge" in r or "unparseable json" in r:
         return "模型 JSON 输出连裸引号修复器都救不回来，查看 out/brief.raw.txt 复盘。"
     return f"原因: {reason.split(':', 1)[-1].strip()[:120]}"
