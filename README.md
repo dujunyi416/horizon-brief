@@ -1,6 +1,6 @@
 # ☀️ Horizon Brief
 
-**一个开源的、agenda 感知的每日新闻筛选引擎。** 每天早上从 ~14 个精选源（宏观/市场/前沿科技/crypto/国内）抓取最近 36 小时的新闻，用 **Gemini（gemini-2.5-flash）** 按「这会不会改变*你的*仓位或研究议程」排序，推送一份简报到 Telegram / 飞书：
+**一个开源的、agenda 感知的每日新闻筛选引擎。** 每天早上从 ~14 个精选源（宏观/市场/前沿科技/crypto/国内）抓取最近 36 小时的新闻，用 **Gemini（gemini-3.6-flash）** 按「这会不会改变*你的*仓位或研究议程」排序，推送一份简报到 Telegram / 飞书：
 
 - **🎯 直接相关** — 与你的仓位、研究议程、关注催化剂挂钩的事件
 - **📈 美股 · 宏观** / **🤖 科技 · AI** / **🪙 加密 · 链上** — 三个圈子并列，各自 3–5 条结构性信号
@@ -18,7 +18,7 @@
 ```
 GitHub Actions (每天 20:47 UTC ≈ 布里斯班 07:00–07:45)
   └─ src/fetch.py   拉 RSS → 36h 窗口 + 去重 + 每源上限 → out/candidates.json（最多 120 条全量池）
-  └─ src/brief.py   从全量池分层抽样 ~60 条（仅 title）→ Gemini 2.5 Flash 排序
+  └─ src/brief.py   从全量池分层抽样 ~60 条（仅 title）→ Gemini 3.6 Flash 排序
   │                 入选条从本地 candidates 补回 summary（不额外消耗 token）
   │                 → out/brief.json；全量池 + 元数据写入 data/YYYY-MM-DD.jsonl
   └─ src/push.py    推送 Telegram / 飞书（配了哪个推哪个）
@@ -95,7 +95,7 @@ python src/push.py
 - 抓取池上限：`max_candidates`（默认 120，影响 `data/` 全量）
 - LLM 子池：`llm_pool_size` + `llm_pool_quotas`（默认 60 条分层抽样，只影响送模型的条数）
 - 改排序哲学：prompt 在 [src/brief.py](src/brief.py) 顶部
-- 换模型：workflow 里 `GEMINI_MODEL`（默认 `gemini-2.5-flash`；可改 `gemini-2.5-pro`）
+- 换模型：workflow 里 `GEMINI_MODEL`（默认 `gemini-3.6-flash`）
 - 改推送时间：[.github/workflows/daily.yml](.github/workflows/daily.yml) 的 cron
 
 ## License

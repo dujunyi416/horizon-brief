@@ -38,7 +38,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           LLM_PROVIDERS: gemini
-          GEMINI_MODEL: gemini-2.5-flash
+          GEMINI_MODEL: gemini-3.6-flash
           AGENDA: ${{ secrets.AGENDA }}
         run: python src/brief.py
 

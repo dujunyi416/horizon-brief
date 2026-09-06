@@ -105,7 +105,7 @@ def call_gemini(prompt: str) -> str:
     key = _env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY")
     if not key:
         raise RuntimeError("GEMINI_API_KEY not set")
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
     base = os.environ.get(
         "GEMINI_ENDPOINT", "https://generativelanguage.googleapis.com/v1beta"
     ).rstrip("/")
